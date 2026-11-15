@@ -1,5 +1,7 @@
 import socket
 
+from app.request import parse
+
 
 def main():
     print("Logs from your program will appear here!")
@@ -10,37 +12,31 @@ def main():
         try:
             conn, addr = server_socket.accept()
         except OSError:
-            continue   # a probe/reset connection failed before accept finished
+            continue    # a probe/reset connection failed before accept finished
 
         try:
-            data = conn.recv(4096)          # read the request first
-            starter_line , header_lines = parse_request(data)
+            data = conn.recv(4096)  # read the request first
 
-            parsed_starter_line = parse_starter_line(starter_line)
-            if parsed_starter_line == "" : continue   # in case of missing starter line parts
-            method , route = parsed_starter_line
+            req = parse(data)
 
-            path , path_value = parse_routes(route)
+            if req is None:
+                conn.sendall(b"HTTP/1.1 400 Bad Request\r\n\r\n")
+                continue
 
-
-            headers = parse_headers(header_lines)
-
-
-            if path == b"" :
+            if req.route == b"":
                 conn.sendall(b"HTTP/1.1 200 OK\r\n\r\n")
 
-            elif path == b"echo"  :
-
-                length = len(str(path_value.decode()))
+            elif req.route == b"echo":
+                length = len(req.route_value)
                 header = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {length}\r\n\r\n"
-                conn.sendall(header.encode() + path_value)
+                conn.sendall(header.encode() + req.route_value)
 
-            elif path == b"user-agent" and b"user-agent" in headers:
+            elif req.route == b"user-agent" and b"user-agent" in req.headers:
 
-                length = len(str(headers[b"user-agent"].decode()))
+                length = len(str(req.headers[b"user-agent"].decode()))
 
                 header = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {length}\r\n\r\n"
-                conn.sendall(header.encode() + headers[b"user-agent"])
+                conn.sendall(header.encode() + req.headers[b"user-agent"])
 
             else :
                 conn.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
@@ -52,64 +48,5 @@ def main():
             conn.close()
 
 
-
-def parse_request(data):
-    lines = data.split(b"\r\n\r\n")     # list of lines (bytes)
-    head = lines[0]
-    head_lines = head.split(b"\r\n")
-    starter_line = head_lines[0]    # b'GET /user-agent HTTP/1.1'
-    headers = head_lines[1:]   # [b'Host: ...', b'User-Agent: ...', b'Accept: ...']
-
-    return starter_line , headers
-
-def parse_headers(headers):
-    headers_list = {}
-
-    for line in headers:
-        name, _, value = line.partition(b":")
-        headers_list[name.strip().lower()] = value.strip()
-
-    return headers_list
-
-def parse_starter_line(starter_line):
-    parts = starter_line.split(b" ")     # [b'GET', b'/abcdefg', b'HTTP/1.1']
-    if len(parts) != 3:
-        return ""
-
-    method = parts[0]
-    path = parts[1]
-
-    return method , path
-
-
-def parse_routes(route):
-    routes = route.split(b"/") # ["" , "echo" , "value"] || [""]
-
-    path = b""
-    path_value = b""
-
-    if len(routes) > 1:
-        path = routes[1]
-        if len(routes) > 2:
-            path_value = routes[2]
-
-    return path , path_value
-
-
 if __name__ == "__main__":
     main()
-
-
-    # // Request line
-    # GET
-    # /user-agent
-    # HTTP/1.1
-    # \r\n
-
-    # // Headers
-    # Host: localhost:4221\r\n
-    # User-Agent: foobar/1.2.3\r\n  // Read this value
-    # Accept: */*\r\n
-    # \r\n
-
-    # // Request body (empty)
