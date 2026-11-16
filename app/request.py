@@ -13,25 +13,32 @@ def parse(data) -> Request | None:
     # all your current helper logic goes here
     # return None if the request is malformed
     starter_line , header_lines = _parse_request(data)
+    _ , _, body = data.partition(b"\r\n\r\n") # body || b""
 
     parsed = _parse_starter_line(starter_line)
-    if parsed == "" : return None   # in case of missing starter line parts
+    if parsed == "" : return None       # in case of missing starter line parts
 
     method , route = parsed
 
     path , path_value = _parse_routes(route)
     headers = _parse_headers(header_lines)
 
-    return Request(method=method, path=route, route=path, route_value=path_value, headers=headers, body=b"")
+    return Request(method=method, path=route, route=path, route_value=path_value, headers=headers, body=body)
 
 
 
 def _parse_request(data):
     lines = data.split(b"\r\n\r\n")     # list of lines (bytes)
     head = lines[0]
+    body = b""
     head_lines = head.split(b"\r\n")
-    starter_line = head_lines[0]    # b'GET /user-agent HTTP/1.1'
-    headers = head_lines[1:]        # [b'Host: ...', b'User-Agent: ...', b'Accept: ...']
+    starter_line = head_lines[0]        # b'GET /user-agent HTTP/1.1'
+    headers = head_lines[1:]            # [b'Host: ...', b'User-Agent: ...', b'Accept: ...']
+
+    # parsed = _parse_starter_line(starter_line)
+    # if parsed == "" : return None       # in case of missing starter line parts
+    # method , route = parsed
+    # if method == b"POST": body = lines[1]
 
     return starter_line , headers
 
@@ -67,3 +74,21 @@ def _parse_routes(route):
             path_value = routes[2]
 
     return path , path_value
+
+def _parse_body():
+    ...
+
+# // Request line
+# POST /files/number HTTP/1.1
+# \r\n
+
+# // Headers
+# Host: localhost:4221\r\n
+# User-Agent: curl/7.64.1\r\n
+# Accept: */*\r\n
+# Content-Type: application/octet-stream  // Header that specifies the format of the request body
+# Content-Length: 5\r\n                   // Header that specifies the size of the request body, in bytes
+# \r\n
+
+# // Request Body
+# 12345

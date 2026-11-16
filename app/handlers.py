@@ -26,10 +26,10 @@ def handle_user_agent(req):
 
 
 def handel_file(req):
-    if req.method == "POST":
-        return handel_get_file(req)
-    elif req.method == "GET" :
+    if req.method == b"POST":
         return handel_post_file(req)
+    elif req.method == b"GET" :
+        return handel_get_file(req)
 
 def handel_get_file(req):
     not_found = b"HTTP/1.1 404 Not Found\r\n\r\n"
@@ -56,7 +56,33 @@ def handel_get_file(req):
     return header.encode() + content
 
 def handel_post_file(req):
-    ...
+    not_found = b"HTTP/1.1 404 Not Found\r\n\r\n"
+    if DIRECTORY is None:
+        return not_found
+
+    name = req.path[len(b"/files/"):].decode(errors="replace")
+    if not name:
+        return not_found
+
+    base = os.path.realpath(DIRECTORY)
+    full_path = os.path.realpath(os.path.join(base, name))
+    content = req.body
+
+    try:
+        if os.path.commonpath([base, full_path]) != base:
+            return not_found
+        with open(full_path, "wb") as f:
+            f.write(content)
+            return b"HTTP/1.1 201 Created\r\n\r\n"
+            
+    except (OSError, ValueError):
+        return not_found
+
+        # with open(some_path, "wb") as f:
+        #     f.write(some_bytes)
+
+
+
 
 def handle_not_found(req):
     return (b"HTTP/1.1 404 Not Found\r\n\r\n")
