@@ -31,7 +31,7 @@ def _parse_request(data):
     head = lines[0]
     head_lines = head.split(b"\r\n")
     starter_line = head_lines[0]    # b'GET /user-agent HTTP/1.1'
-    headers = head_lines[1:]   # [b'Host: ...', b'User-Agent: ...', b'Accept: ...']
+    headers = head_lines[1:]        # [b'Host: ...', b'User-Agent: ...', b'Accept: ...']
 
     return starter_line , headers
 

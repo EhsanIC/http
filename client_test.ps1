@@ -1,10 +1,16 @@
+# 0. prepare a directory for the /files tests (inside the project)
+$dir = Join-Path $PWD "test_files_dir"
+New-Item -ItemType Directory -Force -Path $dir | Out-Null
+
 # 1. start the server in the background, logging to files
 Write-Host ">> Starting server..."
 $server = Start-Process -FilePath "uv" `
-    -ArgumentList "run", "python", "-u", "-m", "app.main" `
+    -ArgumentList "run", "python", "-u", "-m", "app.main", "--directory", "`"$dir`"" `
     -RedirectStandardOutput "server.log" `
     -RedirectStandardError "server.err.log" `
     -NoNewWindow -PassThru
+
+$result = 0
 
 try {
     # 2. wait until the port accepts connections (max ~10 s)
@@ -29,8 +35,16 @@ try {
 
     # 3. run the client tests
     Write-Host ">> Running tests..."
-    uv run python ./app/test_client.py
-    $result = $LASTEXITCODE
+    uv run python ./test/test_client.py
+    if ($LASTEXITCODE -ne 0) { $result = 1 }
+
+    Write-Host "`n>> Running concurrency test..."
+    uv run python ./test/test_concurrent.py
+    if ($LASTEXITCODE -ne 0) { $result = 1 }
+
+    Write-Host "`n>> Running files test..."
+    uv run python ./test/test_files.py "$dir"
+    if ($LASTEXITCODE -ne 0) { $result = 1 }
 
     # 4. show the server logs
     Write-Host "`n>> Server log:"
