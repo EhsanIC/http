@@ -1,6 +1,7 @@
 import os
 import socket
 import sys
+import threading
 
 # Enable ANSI escape codes on Windows terminals
 if os.name == "nt":
@@ -11,7 +12,6 @@ DIM = "\033[2m"
 CYAN = "\033[36m"
 GREEN = "\033[32m"
 RED = "\033[31m"
-YELLOW = "\033[33m"
 BOLD = "\033[1m"
 
 HOST, PORT = "localhost", 4221
@@ -23,78 +23,78 @@ TESTS = [
         "request": b"GET / HTTP/1.1\r\nHost: localhost:4221\r\n\r\n",
         "expected": b"HTTP/1.1 200 OK\r\n\r\n",
     },
-    # {
-    #     "name": "Respond with 404 on random path",
-    #     "command": "curl -v http://localhost:4221/abcdefg",
-    #     "request": b"GET /abcdefg HTTP/1.1\r\nHost: localhost:4221\r\n\r\n",
-    #     "expected": b"HTTP/1.1 404 Not Found\r\n\r\n",
-    # },
-    # {
-    #     "name": "Respond with 404 on /index.html",
-    #     "command": "curl -v http://localhost:4221/index.html",
-    #     "request": b"GET /index.html HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n",
-    #     "expected": b"HTTP/1.1 404 Not Found\r\n\r\n",
-    # },
-    # {
-    #     "name": "Respond with 200 on / (with extra headers)",
-    #     "command": "curl -v http://localhost:4221",
-    #     "request": b"GET / HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n",
-    #     "expected": b"HTTP/1.1 200 OK\r\n\r\n",
-    # },
-    # {
-    #     "name": "Echo a short string",
-    #     "command": "curl -v http://localhost:4221/echo/abc",
-    #     "request": b"GET /echo/abc HTTP/1.1\r\nHost: localhost:4221\r\n\r\n",
-    #     "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc",
-    # },
-    # {
-    #     "name": "Echo a longer string",
-    #     "command": "curl -v http://localhost:4221/echo/hello-world",
-    #     "request": b"GET /echo/hello-world HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n",
-    #     "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 11\r\n\r\nhello-world",
-    # },
-    # {
-    #     "name": "Echo a single character",
-    #     "command": "curl -v http://localhost:4221/echo/x",
-    #     "request": b"GET /echo/x HTTP/1.1\r\nHost: localhost:4221\r\n\r\n",
-    #     "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 1\r\n\r\nx",
-    # },
-    # {
-    #     "name": "Echo digits and underscores",
-    #     "command": "curl -v http://localhost:4221/echo/raspberry_123",
-    #     "request": b"GET /echo/raspberry_123 HTTP/1.1\r\nHost: localhost:4221\r\n\r\n",
-    #     "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nraspberry_123",
-    # },
-    # {
-    #     "name": "User-Agent basic",
-    #     "command": 'curl -v --header "User-Agent: foobar/1.2.3" http://localhost:4221/user-agent',
-    #     "request": b"GET /user-agent HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: foobar/1.2.3\r\nAccept: */*\r\n\r\n",
-    #     "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 12\r\n\r\nfoobar/1.2.3",
-    # },
-    # {
-    #     "name": "User-Agent as last header",
-    #     "command": 'curl -v --header "User-Agent: mango/9.9" http://localhost:4221/user-agent',
-    #     "request": b"GET /user-agent HTTP/1.1\r\nHost: localhost:4221\r\nAccept: */*\r\nUser-Agent: mango/9.9\r\n\r\n",
-    #     "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 9\r\n\r\nmango/9.9",
-    # },
-    # {
-    #     "name": "User-Agent as first header",
-    #     "command": 'curl -v --header "User-Agent: blueberry/1.0" http://localhost:4221/user-agent',
-    #     "request": b"GET /user-agent HTTP/1.1\r\nUser-Agent: blueberry/1.0\r\nHost: localhost:4221\r\n\r\n",
-    #     "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nblueberry/1.0",
-    # },
-    # {
-    #     "name": "User-Agent with spaces in value",
-    #     "command": 'curl -v --header "User-Agent: Mozilla/5.0 (X11; Linux)" http://localhost:4221/user-agent',
-    #     "request": b"GET /user-agent HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: Mozilla/5.0 (X11; Linux)\r\n\r\n",
-    #     "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 24\r\n\r\nMozilla/5.0 (X11; Linux)",
-    # },
-    # {
-    #     "name": "User-Agent header name in lowercase",
-    #     "command": 'curl -v --header "user-agent: apple/2.0" http://localhost:4221/user-agent',
-    #     "request": b"GET /user-agent HTTP/1.1\r\nHost: localhost:4221\r\nuser-agent: apple/2.0\r\n\r\n",
-    #     "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 9\r\n\r\napple/2.0",
-    # },
+    {
+        "name": "Respond with 404 on random path",
+        "command": "curl -v http://localhost:4221/abcdefg",
+        "request": b"GET /abcdefg HTTP/1.1\r\nHost: localhost:4221\r\n\r\n",
+        "expected": b"HTTP/1.1 404 Not Found\r\n\r\n",
+    },
+    {
+        "name": "Respond with 404 on /index.html",
+        "command": "curl -v http://localhost:4221/index.html",
+        "request": b"GET /index.html HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n",
+        "expected": b"HTTP/1.1 404 Not Found\r\n\r\n",
+    },
+    {
+        "name": "Respond with 200 on / (with extra headers)",
+        "command": "curl -v http://localhost:4221",
+        "request": b"GET / HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n",
+        "expected": b"HTTP/1.1 200 OK\r\n\r\n",
+    },
+    {
+        "name": "Echo a short string",
+        "command": "curl -v http://localhost:4221/echo/abc",
+        "request": b"GET /echo/abc HTTP/1.1\r\nHost: localhost:4221\r\n\r\n",
+        "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc",
+    },
+    {
+        "name": "Echo a longer string",
+        "command": "curl -v http://localhost:4221/echo/hello-world",
+        "request": b"GET /echo/hello-world HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n",
+        "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 11\r\n\r\nhello-world",
+    },
+    {
+        "name": "Echo a single character",
+        "command": "curl -v http://localhost:4221/echo/x",
+        "request": b"GET /echo/x HTTP/1.1\r\nHost: localhost:4221\r\n\r\n",
+        "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 1\r\n\r\nx",
+    },
+    {
+        "name": "Echo digits and underscores",
+        "command": "curl -v http://localhost:4221/echo/raspberry_123",
+        "request": b"GET /echo/raspberry_123 HTTP/1.1\r\nHost: localhost:4221\r\n\r\n",
+        "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nraspberry_123",
+    },
+    {
+        "name": "User-Agent basic",
+        "command": 'curl -v --header "User-Agent: foobar/1.2.3" http://localhost:4221/user-agent',
+        "request": b"GET /user-agent HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: foobar/1.2.3\r\nAccept: */*\r\n\r\n",
+        "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 12\r\n\r\nfoobar/1.2.3",
+    },
+    {
+        "name": "User-Agent as last header",
+        "command": 'curl -v --header "User-Agent: mango/9.9" http://localhost:4221/user-agent',
+        "request": b"GET /user-agent HTTP/1.1\r\nHost: localhost:4221\r\nAccept: */*\r\nUser-Agent: mango/9.9\r\n\r\n",
+        "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 9\r\n\r\nmango/9.9",
+    },
+    {
+        "name": "User-Agent as first header",
+        "command": 'curl -v --header "User-Agent: blueberry/1.0" http://localhost:4221/user-agent',
+        "request": b"GET /user-agent HTTP/1.1\r\nUser-Agent: blueberry/1.0\r\nHost: localhost:4221\r\n\r\n",
+        "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nblueberry/1.0",
+    },
+    {
+        "name": "User-Agent with spaces in value",
+        "command": 'curl -v --header "User-Agent: Mozilla/5.0 (X11; Linux)" http://localhost:4221/user-agent',
+        "request": b"GET /user-agent HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: Mozilla/5.0 (X11; Linux)\r\n\r\n",
+        "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 24\r\n\r\nMozilla/5.0 (X11; Linux)",
+    },
+    {
+        "name": "User-Agent header name in lowercase",
+        "command": 'curl -v --header "user-agent: apple/2.0" http://localhost:4221/user-agent',
+        "request": b"GET /user-agent HTTP/1.1\r\nHost: localhost:4221\r\nuser-agent: apple/2.0\r\n\r\n",
+        "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 9\r\n\r\napple/2.0",
+    },
 ]
 
 
@@ -110,22 +110,60 @@ def send_request(raw: bytes) -> bytes:
         return data
 
 
+def run_test(t, barrier, results):
+    barrier.wait()                     # all tests released at the same moment
+
+    try:
+        data = send_request(t["request"])
+    except Exception as e:
+        data = f"ERROR: {e}".encode()
+    results.append({"test": t, "data": data})
+
+
+ORDER = {id(t): i for i, t in enumerate(TESTS)}
+
+
+# shared results file — client_test.ps1 collects all suites from it at the end
+RESULTS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "test_results.txt")
+
+
+def append_results(passed_names, failed_names):
+    with open(RESULTS_FILE, "a", encoding="utf-8") as f:
+        for name in passed_names:
+            f.write(f"PASS\t{name}\n")
+        for name in failed_names:
+            f.write(f"FAIL\t{name}\n")
+
+
 def main():
+    n = len(TESTS)
+    barrier = threading.Barrier(n)
+    results = []
+    threads = [threading.Thread(target=run_test, args=(t, barrier, results)) for t in TESTS]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    # print in the original TESTS order, so output is deterministic
     failed = 0
-    for t in TESTS:
+    passed_list = []
+    failed_list = []
+    for r in sorted(results, key=lambda r: ORDER[id(r["test"])]):
+        t = r["test"]
         print(f"{CYAN}Test:{RESET}     {t['name']}")
         print(f"{CYAN}Command:{RESET}  {DIM}{t['command']}{RESET}")
-        try:
-            actual = send_request(t["request"])
-        except Exception as e:
-            actual = f"ERROR: {e}".encode()
-        print(f"{CYAN}Output:{RESET}   {actual!r}")
-        if actual == t["expected"]:
+        print(f"{CYAN}Output:{RESET}   {r['data']!r}")
+        if r["data"] == t["expected"]:
             print(f"{CYAN}Result:{RESET}   {GREEN}{BOLD}PASS{RESET}\n")
+            passed_list.append(t["name"])
         else:
             failed += 1
+            failed_list.append(t["name"])
             print(f"{CYAN}Expected:{RESET} {t['expected']!r}")
             print(f"{CYAN}Result:{RESET}   {RED}{BOLD}FAIL{RESET}\n")
+
+    append_results(passed_list, failed_list)
     if failed:
         print(f"{RED}{BOLD}{len(TESTS) - failed}/{len(TESTS)} passed{RESET}")
     else:

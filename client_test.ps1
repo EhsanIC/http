@@ -2,6 +2,9 @@
 $dir = Join-Path $PWD "test_files_dir"
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 
+# start with a fresh combined-results file (each suite appends to it)
+Remove-Item "test_results.txt" -ErrorAction SilentlyContinue
+
 # 1. start the server in the background, logging to files
 Write-Host ">> Starting server..."
 $server = Start-Process -FilePath "uv" `
@@ -49,6 +52,31 @@ try {
     Write-Host "`n>> Running POST files test..."
     uv run python ./test/test_post_files.py "$dir"
     if ($LASTEXITCODE -ne 0) { $result = 1 }
+
+    # 4. big combined summary of every suite, right before the server log
+    if (Test-Path "test_results.txt") {
+        $lines = Get-Content "test_results.txt"
+        $passedCount = @($lines | Where-Object { $_ -like "PASS*" }).Count
+        $failedCount = @($lines | Where-Object { $_ -like "FAIL*" }).Count
+        $totalCount = $passedCount + $failedCount
+
+        Write-Host ""
+        Write-Host "==================================================" -ForegroundColor Cyan
+        Write-Host "  ALL TESTS SUMMARY" -ForegroundColor Cyan
+        Write-Host "==================================================" -ForegroundColor Cyan
+        foreach ($line in $lines) {
+            $text = $line -replace "`t", "  "
+            if ($line -like "PASS*") {
+                Write-Host "  $text" -ForegroundColor Green
+            } elseif ($line -like "FAIL*") {
+                Write-Host "  $text" -ForegroundColor Red
+            }
+        }
+        Write-Host "==================================================" -ForegroundColor Cyan
+        $totalColor = if ($failedCount -gt 0) { "Red" } else { "Green" }
+        Write-Host "  TOTAL: $passedCount/$totalCount passed" -ForegroundColor $totalColor
+        Write-Host "==================================================" -ForegroundColor Cyan
+    }
 
     # 4. show the server logs
     Write-Host "`n>> Server log:"

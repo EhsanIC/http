@@ -39,6 +39,18 @@ def ok(body: bytes) -> bytes:
 
 NOT_FOUND = b"HTTP/1.1 404 Not Found\r\n\r\n"
 
+
+# shared results file — client_test.ps1 collects all suites from it at the end
+RESULTS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "test_results.txt")
+
+
+def append_results(passed_names, failed_names):
+    with open(RESULTS_FILE, "a", encoding="utf-8") as f:
+        for name in passed_names:
+            f.write(f"PASS\t{name}\n")
+        for name in failed_names:
+            f.write(f"FAIL\t{name}\n")
+
 TESTS = [
     {
         "name": "Existing file",
@@ -94,6 +106,8 @@ def send_request(raw: bytes) -> bytes:
 def main():
     make_files()
     failed = 0
+    passed_names = []
+    failed_names = []
     for t in TESTS:
         print(f"{CYAN}Test:{RESET}     {t['name']}")
         print(f"{CYAN}Command:{RESET}  {DIM}{t['command']}{RESET}")
@@ -104,10 +118,13 @@ def main():
         print(f"{CYAN}Output:{RESET}   {actual!r}")
         if actual == t["expected"]:
             print(f"{CYAN}Result:{RESET}   {GREEN}{BOLD}PASS{RESET}\n")
+            passed_names.append(t["name"])
         else:
             failed += 1
+            failed_names.append(t["name"])
             print(f"{CYAN}Expected:{RESET} {t['expected']!r}")
             print(f"{CYAN}Result:{RESET}   {RED}{BOLD}FAIL{RESET}\n")
+    append_results(passed_names, failed_names)
     color = RED if failed else GREEN
     print(f"{color}{BOLD}{len(TESTS) - failed}/{len(TESTS)} passed{RESET}")
     sys.exit(1 if failed else 0)

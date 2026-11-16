@@ -1,6 +1,7 @@
 import os
 import socket
 import sys
+import threading
 
 # Enable ANSI escape codes on Windows terminals
 if os.name == "nt":
@@ -105,6 +106,11 @@ def send_request(raw: bytes) -> bytes:
         return data
 
 
+def read_file(name: str) -> bytes:
+    with open(os.path.join(DIRECTORY, name), "rb") as f:
+        return f.read()
+
+
 def cleanup():
     os.makedirs(DIRECTORY, exist_ok=True)
     # re-create "foo" so the overwrite test always starts from a known state,
@@ -118,48 +124,85 @@ def cleanup():
             pass
 
 
-def read_file(name: str) -> bytes:
-    with open(os.path.join(DIRECTORY, name), "rb") as f:
-        return f.read()
+def run_test(t, barrier, results):
+    barrier.wait()                     # all tests released at the same moment
+
+    try:
+        data = send_request(t["request"])
+    except Exception as e:
+        data = f"ERROR: {e}".encode()
+
+    file_data = None
+    if "verify_file" in t:
+        try:
+            file_data = read_file(t["verify_file"])
+        except OSError as e:
+            file_data = f"ERROR: {e}".encode()
+
+    results.append({"test": t, "data": data, "file_data": file_data})
+
+
+ORDER = {id(t): i for i, t in enumerate(TESTS)}
+
+
+# shared results file — client_test.ps1 collects all suites from it at the end
+RESULTS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "test_results.txt")
+
+
+def append_results(passed_names, failed_names):
+    with open(RESULTS_FILE, "a", encoding="utf-8") as f:
+        for name in passed_names:
+            f.write(f"PASS\t{name}\n")
+        for name in failed_names:
+            f.write(f"FAIL\t{name}\n")
 
 
 def main():
     cleanup()
-    failed = 0
-    for t in TESTS:
-        print(f"{CYAN}Test:{RESET}     {t['name']}")
-        print(f"{CYAN}Command:{RESET}  {DIM}{t['command']}{RESET}")
-        try:
-            actual = send_request(t["request"])
-        except Exception as e:
-            actual = f"ERROR: {e}".encode()
-        print(f"{CYAN}Output:{RESET}   {actual!r}")
 
-        passed = actual == t["expected"]
-
-        if passed and "verify_file" in t:
-            try:
-                content = read_file(t["verify_file"])
-            except OSError as e:
-                content = f"ERROR: {e}".encode()
-            print(f"{CYAN}On disk:{RESET}  {content!r}")
-            if content != t["file_content"]:
-                passed = False
-                print(f"{CYAN}Wanted:{RESET}   {t['file_content']!r}")
-
-        if passed:
-            print(f"{CYAN}Result:{RESET}   {GREEN}{BOLD}PASS{RESET}\n")
-        else:
-            failed += 1
-            print(f"{CYAN}Expected:{RESET} {t['expected']!r}")
-            print(f"{CYAN}Result:{RESET}   {RED}{BOLD}FAIL{RESET}\n")
+    n = len(TESTS)
+    barrier = threading.Barrier(n)
+    results = []
+    threads = [threading.Thread(target=run_test, args=(t, barrier, results)) for t in TESTS]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
 
     # restore the overwrite victim for the GET tests in test_files.py
     with open(os.path.join(DIRECTORY, "foo"), "wb") as f:
         f.write(b"Hello, World!")
 
+    # print in the original TESTS order, so output is deterministic
+    failed = 0
+    passed_names = []
+    failed_names = []
+    for r in sorted(results, key=lambda r: ORDER[id(r["test"])]):
+        t = r["test"]
+        print(f"{CYAN}Test:{RESET}     {t['name']}")
+        print(f"{CYAN}Command:{RESET}  {DIM}{t['command']}{RESET}")
+        print(f"{CYAN}Output:{RESET}   {r['data']!r}")
+
+        passed = r["data"] == t["expected"]
+
+        if passed and r["file_data"] is not None:
+            print(f"{CYAN}On disk:{RESET}  {r['file_data']!r}")
+            if r["file_data"] != t["file_content"]:
+                passed = False
+                print(f"{CYAN}Wanted:{RESET}   {t['file_content']!r}")
+
+        if passed:
+            print(f"{CYAN}Result:{RESET}   {GREEN}{BOLD}PASS{RESET}\n")
+            passed_names.append(t["name"])
+        else:
+            failed += 1
+            failed_names.append(t["name"])
+            print(f"{CYAN}Expected:{RESET} {t['expected']!r}")
+            print(f"{CYAN}Result:{RESET}   {RED}{BOLD}FAIL{RESET}\n")
+
+    append_results(passed_names, failed_names)
     color = RED if failed else GREEN
-    print(f"{color}{BOLD}{len(TESTS) - failed}/{len(TESTS)} passed{RESET}")
+    print(f"{color}{BOLD}{n - failed}/{n} passed{RESET}")
     sys.exit(1 if failed else 0)
 
 
