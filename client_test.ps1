@@ -46,6 +46,10 @@ try {
     uv run python ./test/test_files.py "$dir"
     if ($LASTEXITCODE -ne 0) { $result = 1 }
 
+    Write-Host "`n>> Running POST files test..."
+    uv run python ./test/test_post_files.py "$dir"
+    if ($LASTEXITCODE -ne 0) { $result = 1 }
+
     # 4. show the server logs
     Write-Host "`n>> Server log:"
     Get-Content server.log, server.err.log
