@@ -16,40 +16,69 @@ def RES404RAW():
     return b"HTTP/1.1 404 Not Found\r\n\r\n"
 
 # response(200 , content = None , {"user_agent" : "samsung"} || None)
-def response(res_code = 404, content = None , header = None):
+# def response(res_code = 404, content = None , header = None):
 
-    # new_header = b""
+#     if content == None:
+#         response = RESPONSE_TYPE.get(res_code , RES404RAW)
+#         return response()
 
-    # if "Accept-Encoding" in req.header:
-    #     if "gzip" in req.header.get("Accept-Encoding"):
+#     accepted = (header or {}).get(b"accept-encoding", b"")
 
-    if content == None:
-        response = RESPONSE_TYPE.get(res_code , RES404RAW)
-        return response()
-        # handler = ROUTES.get(req.route, RES404RAW)
-        # return handler(req)
+#     if b"gzip" in accepted:
+#         return (f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"
+#                 f"Content-Length: {len(content)}\r\n"
+#                 f"Content-Encoding: gzip\r\n\r\n").encode() + content
 
-    # if content and header == None:
-    #     return RES200TXT(content)
-    #
-    accepted = (header or {}).get(b"accept-encoding", b"")
+#     return RES200TXT(content)
 
-    if b"gzip" in accepted:
-        return (f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"
-                f"Content-Length: {len(content)}\r\n"
-                f"Content-Encoding: gzip\r\n\r\n").encode() + content
+# Corrected builder
+# def response(res_code=200, content=None, headers=None):
+#     headers = headers or {}
 
-    return RES200TXT(content)
-    # if header != None:
-    #     if content != None and b"gzip" in header[b"accept-encoding"] in header:
-    #         # if header[b"Accept-Encoding"] == b"gzip":
-    #         # if b"gzip" in header[b"accept-encoding"]:
-    #             return f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {len(content.decode())}\r\nContent-Encoding: gzip\r\n\r\n".encode() + content
+#     if content is None:
+#         return RESPONSE_TYPE.get(res_code, RES404RAW)()
+
+#     encoding = None
+#     accepted = headers.get(b"accept-encoding", b"")
+#     if b"gzip" in [s.strip() for s in accepted.split(b",")]:
+#         encoding = "gzip"
+
+#     head = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"
+
+#     if encoding:
+#         head += f"Content-Encoding: {encoding}\r\n"
+#     head += f"Content-Length: {len(content)}\r\n\r\n"
+
+#     return head.encode() + content
 
 
-    # return RES200TXT(content)
+def response(res_code=200 , content = None , headers = None):
+    headers = headers or {}
 
-    # return RES404RAW()
+    if content is  None:
+        return RESPONSE_TYPE.get(res_code , RES404RAW)()
+
+    encoding = None
+    accepted = headers.get(b"accept-encoding", b"")
+
+    # list = []
+    # for s in accepted.split(b","):
+    #     list = s.strip()
+    #     if b"gzip" in list:
+    #         encoding = b"gzip"
+
+    if b"gzip" in [s.strip() for s in accepted.split(b",")]:
+        encoding = "gzip"
+
+    head = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"
+
+    if encoding:
+        head += f"Content-Encoding: {encoding}\r\n"
+    head += f"Content-Length: {len(content)}\r\n"
+    head += "\r\n"
+    return head.encode() + content
+
+
 
 RESPONSE_TYPE = {
     200 : RES200RAW,
