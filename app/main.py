@@ -51,3 +51,29 @@ def handle_client(conn):
 
 if __name__ == "__main__":
     main()
+
+
+#   Case 1: client supports gzip
+#   ─────────────────────────────────────────────
+#   Client                              Your server
+#     │  GET /echo/abc                      │
+#     │  Accept-Encoding: gzip              │
+#     │ ──────────────────────────────────> │
+#     │                                     │  "gzip" is in the header ✅
+#     │  HTTP/1.1 200 OK                    │
+#     │  Content-Type: text/plain           │
+#     │  Content-Encoding: gzip   ← ADD     │
+#     │ <────────────────────────────────── │
+
+
+#   Case 2: client asks for something unsupported
+#   ─────────────────────────────────────────────
+#   Client                              Your server
+#     │  GET /echo/abc                      │
+#     │  Accept-Encoding: invalid-encoding  │
+#     │ ──────────────────────────────────> │
+#     │                                     │  not "gzip" ❌
+#     │  HTTP/1.1 200 OK                    │
+#     │  Content-Type: text/plain           │
+#     │  (no Content-Encoding)    ← OMIT    │
+#     │ <────────────────────────────────── │

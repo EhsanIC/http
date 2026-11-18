@@ -95,6 +95,33 @@ TESTS = [
         "request": b"GET /user-agent HTTP/1.1\r\nHost: localhost:4221\r\nuser-agent: apple/2.0\r\n\r\n",
         "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 9\r\n\r\napple/2.0",
     },
+    # --- compression: Accept-Encoding / Content-Encoding ---
+    {
+        "name": "Compression: gzip requested adds Content-Encoding",
+        "command": 'curl -v -H "Accept-Encoding: gzip" http://localhost:4221/echo/abc',
+        "request": b"GET /echo/abc HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\nAccept-Encoding: gzip\r\n\r\n",
+        "must_contain": [b"HTTP/1.1 200 OK", b"Content-Encoding: gzip", b"Content-Type: text/plain", b"abc"],
+    },
+    {
+        "name": "Compression: invalid encoding gets no Content-Encoding",
+        "command": 'curl -v -H "Accept-Encoding: invalid-encoding" http://localhost:4221/echo/abc',
+        "request": b"GET /echo/abc HTTP/1.1\r\nHost: localhost:4221\r\nAccept-Encoding: invalid-encoding\r\n\r\n",
+        "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc",
+        "must_not_contain": [b"Content-Encoding"],
+    },
+    {
+        "name": "Compression: gzip among multiple encodings",
+        "command": 'curl -v -H "Accept-Encoding: gzip, deflate" http://localhost:4221/echo/abc',
+        "request": b"GET /echo/abc HTTP/1.1\r\nHost: localhost:4221\r\nAccept-Encoding: gzip, deflate\r\n\r\n",
+        "must_contain": [b"HTTP/1.1 200 OK", b"Content-Encoding: gzip", b"abc"],
+    },
+    {
+        "name": "Compression: no Accept-Encoding gets no Content-Encoding",
+        "command": "curl -v http://localhost:4221/echo/abc",
+        "request": b"GET /echo/abc HTTP/1.1\r\nHost: localhost:4221\r\n\r\n",
+        "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc",
+        "must_not_contain": [b"Content-Encoding"],
+    },
 ]
 
 
@@ -121,6 +148,31 @@ def run_test(t, barrier, results):
 
 
 ORDER = {id(t): i for i, t in enumerate(TESTS)}
+
+
+def check(t, data):
+    """Exact match when 'expected' is set, plus contains / not-contains rules."""
+    if "expected" in t and data != t["expected"]:
+        return False
+    for needle in t.get("must_contain", []):
+        if needle not in data:
+            return False
+    for needle in t.get("must_not_contain", []):
+        if needle in data:
+            return False
+    return True
+
+
+def explain_failure(t, data):
+    """Print what the test wanted when it fails."""
+    if "expected" in t:
+        print(f"{CYAN}Expected:{RESET} {t['expected']!r}")
+    for needle in t.get("must_contain", []):
+        if needle not in data:
+            print(f"{CYAN}Missing:{RESET}  {needle!r}")
+    for needle in t.get("must_not_contain", []):
+        if needle in data:
+            print(f"{CYAN}Unexpected:{RESET} {needle!r}")
 
 
 # shared results file — client_test.ps1 collects all suites from it at the end
@@ -154,13 +206,13 @@ def main():
         print(f"{CYAN}Test:{RESET}     {t['name']}")
         print(f"{CYAN}Command:{RESET}  {DIM}{t['command']}{RESET}")
         print(f"{CYAN}Output:{RESET}   {r['data']!r}")
-        if r["data"] == t["expected"]:
+        if check(t, r["data"]):
             print(f"{CYAN}Result:{RESET}   {GREEN}{BOLD}PASS{RESET}\n")
             passed_list.append(t["name"])
         else:
             failed += 1
             failed_list.append(t["name"])
-            print(f"{CYAN}Expected:{RESET} {t['expected']!r}")
+            explain_failure(t, r["data"])
             print(f"{CYAN}Result:{RESET}   {RED}{BOLD}FAIL{RESET}\n")
 
     append_results(passed_list, failed_list)

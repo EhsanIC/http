@@ -1,28 +1,29 @@
 import os
+from app.response import RES200RAW, RES200TXT, RES201RAW, RES400RAW, RES404RAW , response
 
 DIRECTORY = None
 
 def handel(req):
 
-    handler = ROUTES.get(req.route, handle_not_found)
+    # check for the headers
+
+    handler = ROUTES.get(req.route, lambda r:  RES404RAW())
     return handler(req)
 
+
 def handle_root(req):
-    return (b"HTTP/1.1 200 OK\r\n\r\n")
+    return RES200RAW()
+
 
 def handle_echo(req):
-    length = len(req.route_value)
-    header = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {length}\r\n\r\n"
-    return (header.encode() + req.route_value)
+    return response(200 , req.route_value , req.headers)
+    # return RES200TXT(req.route_value)
 
 
 def handle_user_agent(req):
     if b"user-agent" in req.headers:
-        length = len(str(req.headers[b"user-agent"].decode()))
-
-        header = f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {length}\r\n\r\n"
-        return (header.encode() + req.headers[b"user-agent"])
-    return (b"HTTP/1.1 400 Bad Request\r\n\r\n")
+        return RES200TXT(req.headers[b"user-agent"])
+    return RES400RAW()
 
 
 def handel_file(req):
@@ -32,7 +33,7 @@ def handel_file(req):
         return handel_get_file(req)
 
 def handel_get_file(req):
-    not_found = b"HTTP/1.1 404 Not Found\r\n\r\n"
+    not_found = RES404RAW()
     if DIRECTORY is None:
         return not_found
 
@@ -56,7 +57,7 @@ def handel_get_file(req):
     return header.encode() + content
 
 def handel_post_file(req):
-    not_found = b"HTTP/1.1 404 Not Found\r\n\r\n"
+    not_found = RES404RAW()
     if DIRECTORY is None:
         return not_found
 
@@ -73,19 +74,12 @@ def handel_post_file(req):
             return not_found
         with open(full_path, "wb") as f:
             f.write(content)
-            return b"HTTP/1.1 201 Created\r\n\r\n"
-            
+            return RES201RAW()
+
     except (OSError, ValueError):
         return not_found
 
-        # with open(some_path, "wb") as f:
-        #     f.write(some_bytes)
 
-
-
-
-def handle_not_found(req):
-    return (b"HTTP/1.1 404 Not Found\r\n\r\n")
 
 
 
