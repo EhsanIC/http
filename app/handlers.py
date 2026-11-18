@@ -1,5 +1,5 @@
 import os
-from app.response import RES200RAW, RES200TXT, RES201RAW, RES400RAW, RES404RAW , response
+from app.response import RES404RAW , response
 
 DIRECTORY = None
 
@@ -12,7 +12,7 @@ def handel(req):
 
 
 def handle_root(req):
-    return RES200RAW()
+    return response(200)
 
 
 def handle_echo(req):
@@ -22,8 +22,8 @@ def handle_echo(req):
 
 def handle_user_agent(req):
     if b"user-agent" in req.headers:
-        return RES200TXT(req.headers[b"user-agent"])
-    return RES400RAW()
+        return response(200 , req.headers[b"user-agent"])
+    return response(400)
 
 
 def handel_file(req):
@@ -33,7 +33,7 @@ def handel_file(req):
         return handel_get_file(req)
 
 def handel_get_file(req):
-    not_found = RES404RAW()
+    not_found = response(404)
     if DIRECTORY is None:
         return not_found
 
@@ -52,12 +52,10 @@ def handel_get_file(req):
     except (OSError, ValueError):
         return not_found
 
-    header = ("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\n"
-              f"Content-Length: {len(content)}\r\n\r\n")
-    return header.encode() + content
+    return response(200, content, req.headers, content_type="application/octet-stream")
 
 def handel_post_file(req):
-    not_found = RES404RAW()
+    not_found = response(404)
     if DIRECTORY is None:
         return not_found
 
@@ -74,7 +72,7 @@ def handel_post_file(req):
             return not_found
         with open(full_path, "wb") as f:
             f.write(content)
-            return RES201RAW()
+            return response(201)
 
     except (OSError, ValueError):
         return not_found

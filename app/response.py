@@ -1,3 +1,36 @@
+def response(res_code=200 , content = None , headers = None , content_type="text/plain"):
+    headers = headers or {}
+
+    if content is  None:
+        return RESPONSE_TYPE.get(res_code , RES404RAW)()
+
+    encoding = None
+    accepted = headers.get(b"accept-encoding", b"")
+
+    if b"gzip" in [s.strip() for s in accepted.split(b",")]:
+        encoding = "gzip"
+
+    # for header in headers:
+    #     if b"accept-encoding" in header and b"gzip" in header["accept-encoding"]:
+    #         encoding = "gzip"
+    #     if b"content-type" in header and b"application/octet-stream" in header["content-type"]:
+    #         content_type = "application/octet-stream"
+
+    head = f"HTTP/1.1 {res_code} {STATUS_TEXT[res_code]}\r\n"
+    head += f"Content-Type: {content_type}\r\n"
+
+    if encoding:
+        head += f"Content-Encoding: {encoding}\r\n"
+    head += f"Content-Length: {len(content)}\r\n"
+
+    head += "\r\n"
+    return head.encode() + content
+
+    # header = ("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\n"
+    #           f"Content-Length: {len(content)}\r\n\r\n")
+    # return header.encode() + content
+
+# status codes //==================================================================================================================================================>
 # 200s
 def RES200RAW():
     return b"HTTP/1.1 200 OK\r\n\r\n"
@@ -15,27 +48,6 @@ def RES400RAW():
 def RES404RAW():
     return b"HTTP/1.1 404 Not Found\r\n\r\n"
 
-def response(res_code=200 , content = None , headers = None):
-    headers = headers or {}
-
-    if content is  None:
-        return RESPONSE_TYPE.get(res_code , RES404RAW)()
-
-    encoding = None
-    accepted = headers.get(b"accept-encoding", b"")
-
-    if b"gzip" in [s.strip() for s in accepted.split(b",")]:
-        encoding = "gzip"
-
-    head = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"
-
-    if encoding:
-        head += f"Content-Encoding: {encoding}\r\n"
-    head += f"Content-Length: {len(content)}\r\n"
-    
-    head += "\r\n"
-    return head.encode() + content
-
 
 
 RESPONSE_TYPE = {
@@ -45,6 +57,9 @@ RESPONSE_TYPE = {
     404 : RES404RAW,
 }
 
-
-
-# response(200 , content = None , {"user_agent" : "samsung"} || None)
+STATUS_TEXT = {
+    200 : "OK",
+    201 : "Created",
+    400 : "Bad Request",
+    404 : "Not Found"
+}
