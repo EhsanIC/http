@@ -1,3 +1,5 @@
+import gzip
+
 def response(res_code=200 , content = None , headers = None , content_type="text/plain"):
     headers = headers or {}
 
@@ -9,6 +11,7 @@ def response(res_code=200 , content = None , headers = None , content_type="text
 
     if b"gzip" in [s.strip() for s in accepted.split(b",")]:
         encoding = "gzip"
+        content = gzip.compress(content)
 
     # for header in headers:
     #     if b"accept-encoding" in header and b"gzip" in header["accept-encoding"]:
