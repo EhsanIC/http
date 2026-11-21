@@ -7,12 +7,12 @@ def handel(req):
 
     # check for the headers
 
-    handler = ROUTES.get(req.route, lambda r:  RES404RAW())
+    handler = ROUTES.get(req.route, lambda r:  RES404RAW(r.headers.get(b"connection") == b"close"))
     return handler(req)
 
 
 def handle_root(req):
-    return response(200)
+    return response(200, None, req.headers)
 
 
 def handle_echo(req):
@@ -22,8 +22,8 @@ def handle_echo(req):
 
 def handle_user_agent(req):
     if b"user-agent" in req.headers:
-        return response(200 , req.headers[b"user-agent"])
-    return response(400)
+        return response(200 , req.headers[b"user-agent"], req.headers)
+    return response(400, None, req.headers)
 
 
 def handel_file(req):
@@ -33,7 +33,7 @@ def handel_file(req):
         return handel_get_file(req)
 
 def handel_get_file(req):
-    not_found = response(404)
+    not_found = response(404, None, req.headers)
     if DIRECTORY is None:
         return not_found
 
@@ -55,7 +55,7 @@ def handel_get_file(req):
     return response(200, content, req.headers, content_type="application/octet-stream")
 
 def handel_post_file(req):
-    not_found = response(404)
+    not_found = response(404, None, req.headers)
     if DIRECTORY is None:
         return not_found
 
@@ -72,7 +72,7 @@ def handel_post_file(req):
             return not_found
         with open(full_path, "wb") as f:
             f.write(content)
-            return response(201)
+            return response(201, None, req.headers)
 
     except (OSError, ValueError):
         return not_found
