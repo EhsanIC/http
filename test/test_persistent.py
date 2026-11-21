@@ -23,7 +23,7 @@ EXPECT_ECHO = {
     "body": b"banana",
 }
 EXPECT_UA = {
-    "contains": [b"HTTP/1.1 200 OK", b"Content-Type: text/plain", b"Content-Length: 23"],
+    "contains": [b"HTTP/1.1 200 OK", b"Content-Type: text/plain", b"Content-Length: 25"],
     "body": b"blueberry/apple-blueberry",
 }
 

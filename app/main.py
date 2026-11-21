@@ -53,6 +53,9 @@ def handle_client(conn):
             res = handel(req)
             conn.sendall(res)
 
+            if req.headers.get(b"connection") == b"close":
+                return          # finally: closes the socket
+
 
 
 
