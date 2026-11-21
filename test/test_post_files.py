@@ -3,6 +3,8 @@ import socket
 import sys
 import threading
 
+import helpers
+
 # Enable ANSI escape codes on Windows terminals
 if os.name == "nt":
     os.system("")
@@ -95,15 +97,8 @@ TESTS = [
 
 
 def send_request(raw: bytes) -> bytes:
-    with socket.create_connection((HOST, PORT), timeout=3) as client:
-        client.sendall(raw)
-        data = b""
-        while True:                    # read until the server closes
-            chunk = client.recv(4096)
-            if not chunk:
-                break
-            data += chunk
-        return data
+    """Send one request and read exactly one response (Content-Length framed)."""
+    return helpers.send_request(raw, HOST, PORT)
 
 
 def read_file(name: str) -> bytes:

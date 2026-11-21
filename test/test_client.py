@@ -2,6 +2,9 @@ import os
 import socket
 import sys
 import threading
+import gzip
+
+import helpers
 
 # Enable ANSI escape codes on Windows terminals
 if os.name == "nt":
@@ -100,7 +103,8 @@ TESTS = [
         "name": "Compression: gzip requested adds Content-Encoding",
         "command": 'curl -v -H "Accept-Encoding: gzip" http://localhost:4221/echo/abc',
         "request": b"GET /echo/abc HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\nAccept-Encoding: gzip\r\n\r\n",
-        "must_contain": [b"HTTP/1.1 200 OK", b"Content-Encoding: gzip", b"Content-Type: text/plain", b"abc"],
+        "must_contain": [b"HTTP/1.1 200 OK", b"Content-Encoding: gzip", b"Content-Type: text/plain"],
+        "must_not_contain": [b"\r\n\r\nabc"],
     },
     {
         "name": "Compression: invalid encoding gets no Content-Encoding",
@@ -113,7 +117,41 @@ TESTS = [
         "name": "Compression: gzip among multiple encodings",
         "command": 'curl -v -H "Accept-Encoding: gzip, deflate" http://localhost:4221/echo/abc',
         "request": b"GET /echo/abc HTTP/1.1\r\nHost: localhost:4221\r\nAccept-Encoding: gzip, deflate\r\n\r\n",
-        "must_contain": [b"HTTP/1.1 200 OK", b"Content-Encoding: gzip", b"abc"],
+        "must_contain": [b"HTTP/1.1 200 OK", b"Content-Encoding: gzip"],
+        "must_not_contain": [b"\r\n\r\nabc"],
+    },
+    {
+        "name": "Compression: gzip mixed with invalid encodings",
+        "command": 'curl -v -H "Accept-Encoding: invalid-encoding-1, gzip, invalid-encoding-2" http://localhost:4221/echo/abc',
+        "request": b"GET /echo/abc HTTP/1.1\r\nHost: localhost:4221\r\nAccept-Encoding: invalid-encoding-1, gzip, invalid-encoding-2\r\n\r\n",
+        "must_contain": [b"HTTP/1.1 200 OK", b"Content-Encoding: gzip", b"Content-Type: text/plain"],
+        "must_not_contain": [b"\r\n\r\nabc"],
+    },
+    {
+        "name": "Compression: only invalid encodings gets no Content-Encoding",
+        "command": 'curl -v -H "Accept-Encoding: invalid-encoding-1, invalid-encoding-2" http://localhost:4221/echo/abc',
+        "request": b"GET /echo/abc HTTP/1.1\r\nHost: localhost:4221\r\nAccept-Encoding: invalid-encoding-1, invalid-encoding-2\r\n\r\n",
+        "expected": b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc",
+        "must_not_contain": [b"Content-Encoding"],
+    },
+    # --- gzip compression: the body must really be compressed ---
+    {
+        "name": "Compression: gzip body is actually compressed",
+        "command": 'curl -v -H "Accept-Encoding: gzip" http://localhost:4221/echo/abc | hexdump -C',
+        "request": b"GET /echo/abc HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\nAccept-Encoding: gzip\r\n\r\n",
+        "gzip_body": b"abc",
+    },
+    {
+        "name": "Compression: gzip body for a longer string",
+        "command": 'curl -v -H "Accept-Encoding: gzip" http://localhost:4221/echo/hello-world | hexdump -C',
+        "request": b"GET /echo/hello-world HTTP/1.1\r\nHost: localhost:4221\r\nAccept-Encoding: gzip\r\n\r\n",
+        "gzip_body": b"hello-world",
+    },
+    {
+        "name": "Compression: gzip body for repeated text",
+        "command": 'curl -v -H "Accept-Encoding: gzip" http://localhost:4221/echo/aaaaaaaaaaaaaaaaaaaa | hexdump -C',
+        "request": b"GET /echo/aaaaaaaaaaaaaaaaaaaa HTTP/1.1\r\nHost: localhost:4221\r\nAccept-Encoding: gzip\r\n\r\n",
+        "gzip_body": b"aaaaaaaaaaaaaaaaaaaa",
     },
     {
         "name": "Compression: no Accept-Encoding gets no Content-Encoding",
@@ -126,15 +164,8 @@ TESTS = [
 
 
 def send_request(raw: bytes) -> bytes:
-    with socket.create_connection((HOST, PORT), timeout=3) as client:
-        client.sendall(raw)
-        data = b""
-        while True:                    # read until the server closes
-            chunk = client.recv(4096)
-            if not chunk:
-                break
-            data += chunk
-        return data
+    """Send one request and read exactly one response (Content-Length framed)."""
+    return helpers.send_request(raw, HOST, PORT)
 
 
 def run_test(t, barrier, results):
@@ -175,6 +206,45 @@ def explain_failure(t, data):
             print(f"{CYAN}Unexpected:{RESET} {needle!r}")
 
 
+def gzip_problems(t, data):
+    """Verify a response that must carry a real gzip-compressed body."""
+    problems = []
+    head, sep, body = data.partition(b"\r\n\r\n")
+    if not sep:
+        return ["response has no header/body separator"]
+
+    header_lines = head.split(b"\r\n")
+    if header_lines[0] != b"HTTP/1.1 200 OK":
+        problems.append(f"status line is {header_lines[0]!r}")
+    if b"Content-Type: text/plain" not in header_lines[1:]:
+        problems.append("missing Content-Type: text/plain")
+    if b"Content-Encoding: gzip" not in header_lines[1:]:
+        problems.append("missing Content-Encoding: gzip")
+
+    length = None
+    for line in header_lines[1:]:
+        name, _, value = line.partition(b":")
+        if name.strip().lower() == b"content-length":
+            try:
+                length = int(value.strip())
+            except ValueError:
+                problems.append(f"Content-Length is not a number: {value!r}")
+    if length is None:
+        problems.append("missing Content-Length")
+    elif length != len(body):
+        problems.append(f"Content-Length {length} != actual body size {len(body)}")
+
+    try:
+        plain = gzip.decompress(body)
+    except OSError as e:
+        problems.append(f"body is not valid gzip: {e}")
+    else:
+        if plain != t["gzip_body"]:
+            problems.append(f"decompressed body {plain!r} != {t['gzip_body']!r}")
+
+    return problems
+
+
 # shared results file — client_test.ps1 collects all suites from it at the end
 RESULTS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "test_results.txt")
 
@@ -207,8 +277,16 @@ def main():
         print(f"{CYAN}Command:{RESET}  {DIM}{t['command']}{RESET}")
         print(f"{CYAN}Output:{RESET}   {r['data']!r}")
         if check(t, r["data"]):
-            print(f"{CYAN}Result:{RESET}   {GREEN}{BOLD}PASS{RESET}\n")
-            passed_list.append(t["name"])
+            problems = gzip_problems(t, r["data"]) if "gzip_body" in t else []
+            if problems:
+                failed += 1
+                failed_list.append(t["name"])
+                for p in problems:
+                    print(f"{CYAN}Problem:{RESET}  {p}")
+                print(f"{CYAN}Result:{RESET}   {RED}{BOLD}FAIL{RESET}\n")
+            else:
+                print(f"{CYAN}Result:{RESET}   {GREEN}{BOLD}PASS{RESET}\n")
+                passed_list.append(t["name"])
         else:
             failed += 1
             failed_list.append(t["name"])

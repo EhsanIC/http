@@ -1,3 +1,4 @@
+from ast import While
 import socket
 import sys
 import threading
@@ -31,16 +32,29 @@ def main():
 def handle_client(conn):
     try:
 
-        data = conn.recv(4096)  # read the request first
+        buffer = b""
 
-        req = parse(data)
+        while True:
+            raw , rest = parse_request(buffer)
+            if raw is None:
+                chunk = conn.recv(4096)
+                if chunk == b"": break
 
-        if req is None:
-            conn.sendall(b"HTTP/1.1 400 Bad Request\r\n\r\n")
-            return
+                buffer += chunk
+                continue
 
-        res = handel(req)
-        conn.sendall(res)
+            buffer = rest
+            req = parse(raw)
+
+            if req is None:
+                conn.sendall(b"HTTP/1.1 400 Bad Request\r\n\r\n")
+                return
+
+            res = handel(req)
+            conn.sendall(res)
+
+
+
 
     except OSError:
         pass   # client vanished mid-exchange; never kill the loop
@@ -49,8 +63,36 @@ def handle_client(conn):
     finally:
         conn.close()
 
-if __name__ == "__main__":
-    main()
+
+def parse_request(data):
+    break_location = data.find(b"\r\n\r\n")  # location of first b"\r\n\r\n" | -1
+
+    if break_location == -1: return None, data
+    second_head = data[:break_location]
+    # b"POST /files/a.txt HTTP/1.1\r\nContent-Length: 5\r\n\r\n
+    # helloGET /echo/x HTTP/1.1\r\n\r\n"
+    #
+    header_break = second_head.split(b"\r\n")
+    # b"POST /files/a.txt HTTP/1.1
+    # Content-Length: 5
+    #
+    # helloGET /echo/x HTTP/1.1
+    #
+
+    content_length = 0
+    for line in header_break[1:]:
+        name, sep, value = line.partition(b":")
+        if name.strip().lower() == b"content-length":
+            content_length = int(value.strip())
+
+    end = break_location + content_length + 4
+
+    if len(data) < end: return None, data
+
+    raw = data[:end]
+    buffer = data[end:]
+
+    return raw , buffer
 
 
 #   Case 1: client supports gzip
@@ -77,3 +119,16 @@ if __name__ == "__main__":
 #     │  Content-Type: text/plain           │
 #     │  (no Content-Encoding)    ← OMIT    │
 #     │ <────────────────────────────────── │
+
+
+# Compute where the request ends:
+# end = break_location + 4 + content_length
+# You can check this on example 5 by hand. The POST should give end = (end of its headers) + 4 + 5.
+# Check that the whole request has arrived: if len(buffer) < end, the body is still on its way. Don’t parse yet. recv more, add it to the buffer, and check again.
+# Cut the buffer in two with the slicing you tried earlier:
+# raw = buffer[:end] is one request
+# buffer = buffer[end:] is the leftover, which you keep for the next loop iteration
+# Give raw to parse instead of data, then call handel and send the response as you already do.
+
+if __name__ == "__main__":
+    main()

@@ -53,6 +53,10 @@ try {
     uv run python ./test/test_post_files.py "$dir"
     if ($LASTEXITCODE -ne 0) { $result = 1 }
 
+    Write-Host "`n>> Running persistent connection test..."
+    uv run python ./test/test_persistent.py
+    if ($LASTEXITCODE -ne 0) { $result = 1 }
+
     # 4. big combined summary of every suite, right before the server log
     if (Test-Path "test_results.txt") {
         $lines = Get-Content "test_results.txt"
